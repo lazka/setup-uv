@@ -129171,6 +129171,7 @@ exports.tryGetFromToolCache = tryGetFromToolCache;
 exports.downloadVersionFromGithub = downloadVersionFromGithub;
 exports.downloadVersionFromManifest = downloadVersionFromManifest;
 exports.resolveVersion = resolveVersion;
+const node_fs_1 = __nccwpck_require__(73024);
 const path = __importStar(__nccwpck_require__(76760));
 const core = __importStar(__nccwpck_require__(37484));
 const tc = __importStar(__nccwpck_require__(33472));
@@ -129212,7 +129213,18 @@ async function downloadVersion(downloadUrl, artifactName, platform, arch, versio
     let uvDir;
     if (platform === "pc-windows-msvc") {
         // On windows extracting the zip does not create an intermediate directory
-        uvDir = await tc.extractTar(downloadPath, undefined, "x");
+        try {
+            // Try tar first as it's much faster, but only bsdtar supports zip files,
+            // so this my fail if another tar, like gnu tar, ends up being used.
+            uvDir = await tc.extractTar(downloadPath, undefined, "xf");
+        }
+        catch (err) {
+            core.info(`Extracting with tar failed, falling back to zip extraction: ${err.message}`);
+            const extension = getExtension(platform);
+            const fullPathWithExtension = `${downloadPath}${extension}`;
+            await node_fs_1.promises.copyFile(downloadPath, fullPathWithExtension);
+            uvDir = await tc.extractZip(fullPathWithExtension);
+        }
     }
     else {
         const extractedDir = await tc.extractTar(downloadPath);
